@@ -1,0 +1,6 @@
+Internal reference number or ID,HGVS code,Genome assembly,Transcript,Gene name,Intergenic,Chromosomal sex,Other rearrangements/aneuploidy,Open-access consent,Age at last clinical assessment,Prenatal age in weeks,Note,Inheritance,Pathogenicity,Phenotypes,Genotype,Responsible contact
+pat1,chr7:g.103969467C>G,GRCh37/hg19,NM_199000,LHFPL3,No,46XX,No,Yes,5,,Some free text note,De novo constitutive,Pathogenic,"1249, 252, 1518, 1892",Homozygous,Please see instructions
+pat2,NC_000023.10:g.595391T>A,GRCh37/hg19,ENST00000381578,SHOX,No,46XY,No,No,7,,,"Paternally inherited, constitutive in father",Uncertain,"HP:0001852, HP:0000750",Heterozygous,Please see instructions
+pat3,NM_001159673.1:c.1224_1225insC,GRCh37/hg19,,,No,46XY,No,Yes,10,,,"Paternally inherited, constitutive in father",Likely pathogenic,"11226, 276",Heterozygous,Please see instructions
+pat4,ENST00000350026:c.-1-2_-1-1dup,GRCh37/hg19,,ARID1B,Yes,46XY,No,Yes,Prenatal,28,,"Maternally inherited, constitutive in mother",Likely pathogenic,"11226, 276",Heterozygous,Please see instructions
+pat4,BRCA1:c.123dup,GRCh37/hg19,NM_007300,,No,46XY,No,Yes,unknown,,,"Maternally inherited, constitutive in mother",Likely pathogenic,"11226, 276",Heterozygous,Please see instructions

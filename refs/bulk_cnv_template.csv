@@ -1,0 +1,5 @@
+"Internal reference number or ID",Chromosome,Start,End,"Genome assembly",Genotype,Class,"Mean ratio","Chromosomal sex","Other rearrangements/aneuploidy","Open-access consent","Age at last clinical assessment","Prenatal age in weeks",Note,Inheritance,Pathogenicity,Phenotypes,"Responsible contact"
+SAMPLE1,1,200001098,200921098,GRCh37/hg19,Heterozygous,Deletion,-0.797565,46XY,No,Yes,5,,"Some free text note",Unknown,Pathogenic,"HP:0010066, HP:0010314, HP:0010442, HP:0010562","Please see instructions"
+SAMPLE2,2,63921609,70915279,GRCh37/hg19,Heterozygous,Deletion,-1,46XX,No,Yes,1,,,"De novo constitutive","Likely pathogenic","HP:0000400, HP:0001249, HP:0001831, HP:0008872","Please see instructions"
+SAMPLE3,18,180229,10672792,GRCh37/hg19,Heterozygous,Duplication,0.58,46XX,No,Yes,26,,,Unknown,"Likely pathogenic","400, 1249, HP:0001831, HP:0008872","Please see instructions"
+SAMPLE4,X,115007250,116707313,GRCh37/hg19,Hemizygous,Triplication,1.653375,46XY,No,No,Prenatal,20,,"Maternally inherited, constitutive in mother",Uncertain,"1135, 1159, 1212, 1249, 1250, 252","Please see instructions"
