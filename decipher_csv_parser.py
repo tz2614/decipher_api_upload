@@ -7,10 +7,11 @@ import datetime
 import argparse
 import pandas as pd
 from pandas import Series, DataFrame
-import glob
 import csv
 import pprint
-import re
+from sqlalchemy import create_engine
+from get_gender import connect_to_db, run_query_in_db, disconnect_to_db
+
 pp = pprint.PrettyPrinter(indent=4)
 
 
@@ -27,33 +28,34 @@ output variant info related to each gene
 
 filedate = str(datetime.date.today())
 filedate = "".join(filedate.split("-"))
-mcgm_csv = "S:/Genetics/Repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/MCGM_RD_individual_genes.csv"
-bulk_cnv_template = "S:/Genetics/Repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/bulk_cnv_template.xlsx"
-bulk_snv_hgvs_template = "S:/Genetics/Repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/bulk_snv_hgvs_template.xlsx"
-bulk_snv_template = "S:/Genetics/Repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/bulk_snv_template.xlsx"
-cnv_output_csv = "S:/Genetics/Repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/cnv_output.csv"
-snv_hgvs_output_csv = "S:/Genetics/Repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/snv_hgvs_output.csv"
-snv_output_csv = "S:/Genetics/Repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/snv_output.csv"
+mcgm_csv = "/mnt/repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/MCGM_RD_individual_genes.csv"
+bulk_cnv_template = "/mnt/repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/bulk_cnv_template.xlsx"
+bulk_snv_hgvs_template = "/mnt/repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/bulk_snv_hgvs_template.xlsx"
+bulk_snv_template = "/mnt/repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/bulk_snv_template.xlsx"
+cnv_output_csv = "/mnt/repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/{0}_cnv_output.csv".format(filedate)
+snv_hgvs_output_csv = "/mnt/repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/{0}_snv_hgvs_output.csv".format(filedate)
+snv_output_csv = "/mnt/repository/Bioinformatics/tengyue_zheng_projects/Decipher_API_upload/{0}_snv_output.csv".format(filedate)
+sample_db = "/users/tz1/git/decipher_api_upload/samples_be.db"
 
 def parse_mcgm_var_to_df(mcgm_csv):
 
     mcgm_csv = os.path.abspath(mcgm_csv)
-    print (mcgm_csv)
+    #print (mcgm_csv)
     
     # import data from MCGM_RD_individual_genes.csv
 
     csv_df = pd.read_csv(mcgm_csv, na_values=[" "], encoding='UTF-8')
 
-    print ("data_frame mcgm_csv generated")
+    print ("Data Frame for {0} generated".format(mcgm_csv))
 
     return csv_df
 
 def convert_template_xls_to_df(template_xls):
     
-    # get a list of sheet names from template xls
+    # get a list of sheet names from template xlsx
     
     template_xls = os.path.abspath(template_xls)
-    print (template_xls)
+    print ("Convert {0} to Data Frame".format(template_xls))
     
     xls_obj = pd.ExcelFile(template_xls)
     sheet_names = xls_obj.sheet_names
@@ -62,7 +64,7 @@ def convert_template_xls_to_df(template_xls):
 
 def parse_ref_from_sheet_to_dict(sheet_names, xls_obj):
     
-    # parse info from sheets as lists 
+    # parse info from template excel sheets as lists 
     
     template_refs = {}
     
@@ -72,31 +74,27 @@ def parse_ref_from_sheet_to_dict(sheet_names, xls_obj):
         df = xls_obj.parse(name, header=None)
         
         if "Data" in name:            
-            headers = df.iloc[0, :].tolist()
-            template_refs["headers"] = headers
-            #print (headers)
+            template_refs["headers"] = df.iloc[0, :].tolist()
+            #print (template_refs["headers"] )
         
-        elif "Inheritance" in name:
-            modes = df.iloc[:, 0].tolist()
-            template_refs["modes"] = modes
-            #print (modes)
+        elif "Inheritance" in name:            
+            template_refs["Inheritance"] = df.iloc[:, 0].tolist()
+            #print (template_refs["Inheritance"])
             
         elif "Pathogenicity" in name:
-            classifications = df.iloc[:, 0].tolist()
-            #print (classifications)
+            template_refs["Pathogenicity"] = df.iloc[:, 0].tolist()
+            #print (template_refs["Pathogenicity"])
             
         elif "Genotype" in name:
-            genotypes = df.iloc[:, 0].tolist()
-            template_refs["genotypes"] = genotypes
-            #print (genotypes)
-            
+            template_refs["Genotype"] = df.iloc[:, 0].tolist()
+            #print (template_refs["Genotype"])
+
         elif "Phenotypes" in name:
-            
             phenotype_ids = df.iloc[:, 0].tolist()
             hpo_terms = df.iloc[:, 2].tolist()
             phenotype_dict = dict(zip(phenotype_ids, hpo_terms))
-            template_refs["phenotypes"] = phenotype_dict
-            #print (phenotypes)
+            template_refs["Phenotypes"] = phenotype_dict
+            #print (template_refs["Phenotypes"])
         
         elif "Class" in name:
             CNV_class = df.iloc[:, 0].tolist()
@@ -109,16 +107,11 @@ def parse_ref_from_sheet_to_dict(sheet_names, xls_obj):
 def intergenic_determination(csv_df):
         
     # check if variant is intergenic using vep_consequence column
-    
+    print ("Check if variant is intergenic using vep_consequences and populate Intergenic column")
     vep_consequences = Series.tolist(csv_df.loc[:,"vep_consequence"])
-    for status in vep_consequences:
-        if status is "intergenic_variant":
-            status = ["Yes" for x in vep_consequences]
-        else:
-            status = ["No" for x in vep_consequences]
+    vep_consequences = ["Yes" if "intergenic" in x or "intragenic" in x else "No" for x in vep_consequences]
     
     return vep_consequences
-
 
 def extracting_data_from_csv(csv_df):
     
@@ -136,9 +129,9 @@ def extracting_data_from_csv(csv_df):
     lab_ids = Series.tolist(csv_df.loc[:,"reference"])
     
     # column we can extract data from but not required
-    note = Series.tolist(csv_df.loc[:,"sanitised_comment"])
-    pathogenicity = [x.split(":")[0] for x in Series.tolist(csv_df.loc[:,"decision"])]
-    
+    #note = Series.tolist(csv_df.loc[:,"sanitised_comment"])
+    pathogenicity = [x.split(":")[1].split(",")[0].strip() for x in Series.tolist(csv_df.loc[:,"decision"])]
+    #print (pathogenicity)
     # optional columns
     missing = ["" for x in range(len(ids))]
     
@@ -150,11 +143,28 @@ def extracting_data_from_csv(csv_df):
     phenotypes = missing
     data_owner = missing
     mean_ratio = missing
+    note = missing
     
-    # missing columns
-    sex = missing
-    build = ["GRCh37" for x in range(len(ids))]
+    # extract gender of patient from sample_be.db
 
+    print ("Extracting gender from samples_be.db")
+    sex = []
+    conn = connect_to_db(sample_db)
+    for identifier in lab_ids:
+    	identifier = int(identifier.split("_")[-1])
+    	gender = str(run_query_in_db(identifier, conn))
+    	if gender == "1":
+    		sex.append("46XY")
+    	elif gender == "2":
+    		sex.append("46XX")
+    	else:
+    		print ("issue with querying Samples_be.db database, check {0} in /users/tz1/git/decipher_api_upload/samples_be_sqlite_db.log".format(identifier))
+    		sex.append("SEX UNKNOWN")
+    disconnect_to_db(conn)
+    print ("Extraction COMPLETE")
+
+    # Generate a list of genome builds
+    build = ["GRCh37" for x in range(len(ids))]
 
     # handling missing columns of data that maybe required
     try:
@@ -188,8 +198,10 @@ def extracting_data_from_csv(csv_df):
         sex = missing  
         
    # output data as nested lists
+
+    print ("Inputting data into df_dict")
     df_dict = {}
-    df_dict["Internal reference number or ID"] = ids
+    df_dict["Internal reference number or ID"] = lab_ids
     df_dict["Chromosome"] = chroms
     df_dict["Start"] = start
     df_dict["End"] = end
@@ -214,7 +226,7 @@ def extracting_data_from_csv(csv_df):
     df_dict["Class"] = cnv_type
     df_dict["Mean ratio"] = mean_ratio
     df_dict["ensembl_gene_id"] = ensembl_gene_id
-    df_dict["patient_ids"] = lab_ids
+    df_dict["patient id"] = ids
    
     #generic_df_list = [ids, chroms, start, end, build, ref, alt, refseq_tx, genes, intergenic, sex, aneuploidy, consent, age, prenatal_age, note, inheritance, pathogenicity, phenotypes, genotype, data_owner, hgvs_code, cnv_type, mean_ratio, ensembl_gene_id]
     #print ("no cnv/snv/snv_hgvs data available, generic data exported")    
@@ -225,36 +237,45 @@ def import_data_to_new_df(csv_dict, headers):
     
     # create new df from "Data" tab of each template
     
+    print ("Inputting data from csv_dict into Data Frame")
     new_df = pd.DataFrame(csv_dict, columns=headers)
             
     #print (new_df)
     return new_df
 
-def check_required_fields_in_df(df_dict, headers):
+def check_required_fields_in_df(csv_dict, headers, refs):
  
     # mandatory fields
     cnv_list = ["Internal reference number or ID", "Chromosome", "Start", "End", "Class", "Chromosomal sex"]
     snv_hgvs_list = ["Internal reference number or ID", "HGVS code", "Genome assembly", "Transcript", "Gene name", "Intergenic", "Chromosomal sex", "Genotype"]
     snv_list = ["Internal reference number or ID", "Chromosome", "Start", "Genome assembly", "Transcript", "Reference allele", "Alternate allele",  "Gene name", "Intergenic", "Chromosomal sex", "Genotype"]
-        
-    if all(x in df_dict.keys() for x in cnv_list):
+    
+    print ("Check and populate Pathogenicity and Genotype in csv_dict of each variant against upload template terms")
+    # check variant classification from mcgm csv compliant with Decipher API upload template requirements
+    csv_dict["Pathogenicity"] = ["Uncertain" if x=="Uncertain significance" else x for x in csv_dict["Pathogenicity"]]
+    csv_dict["Pathogenicity"] = ["" if x not in refs["Pathogenicity"] else x for x in csv_dict["Pathogenicity"]]
+    #print (csv_dict["Pathogenicity"])
+    # check variant genotype from mcgm csv compliant with Decipher API upload template requirements
+    csv_dict["Genotype"] = ["" if x not in refs["Genotype"] else x for x in csv_dict["Genotype"]]
+
+    if all(x in csv_dict.keys() for x in cnv_list):
         new_csv_dict = {}
         for h in headers:
-            new_csv_dict[h] = df_dict[h]
+            new_csv_dict[h] = csv_dict[h]
         #print (new_csv_dict)
         return new_csv_dict
     
-    elif all(x in df_dict.keys() for x in snv_hgvs_list):
+    elif all(x in csv_dict.keys() for x in snv_hgvs_list):
         new_csv_dict = {}
         for h in headers:
-            new_csv_dict[h] = df_dict[h]
+            new_csv_dict[h] = csv_dict[h]
         #print (new_csv_dict)
         return new_csv_dict
     
-    elif all(x in df_dict.keys() for x in snv_list):
+    elif all(x in csv_dict.keys() for x in snv_list):
         new_csv_dict = {}
         for h in headers:
-            new_csv_dict[h] = df_dict[h]
+            new_csv_dict[h] = csv_dict[h]
         #print (new_csv_dict)
         return new_csv_dict
     
@@ -274,29 +295,42 @@ def main():
     csv_dict = extracting_data_from_csv(csv_df)
     # print (csv_dict)
     
+    # create CNV Decipher upload csv
+
+    # parse template info into cnv_refs
     cnv_sn, cnv_obj = convert_template_xls_to_df(bulk_cnv_template)
     cnv_refs = parse_ref_from_sheet_to_dict(cnv_sn, cnv_obj)
     cnv_headers = cnv_refs["headers"]
-    print (cnv_headers)
-    new_csv_dict = check_required_fields_in_df(csv_dict, cnv_headers)
+    
+
+    # parse info from mgcm_csv into cnv_df, then converting to csv
+    new_csv_dict = check_required_fields_in_df(csv_dict, cnv_headers, cnv_refs)
     cnv_df = import_data_to_new_df(new_csv_dict, cnv_headers)
     print (cnv_df.head())
     cnv_csv = output_csv(cnv_df, cnv_output_csv)
     
+    # create SNV HGVS Decipher upload csv
+
+    # parse template info into snv_hgvs_refs
     snv_hgvs_sn, snv_hgvs_obj = convert_template_xls_to_df(bulk_snv_hgvs_template)
     snv_hgvs_refs = parse_ref_from_sheet_to_dict(snv_hgvs_sn, snv_hgvs_obj)
     snv_hgvs_headers = snv_hgvs_refs["headers"]
-    print (snv_hgvs_headers)
-    new_csv_dict = check_required_fields_in_df(csv_dict, snv_hgvs_headers)
+
+    #parse info from mgcm_csv into snv_hgvs_df, then converting to csv
+    new_csv_dict = check_required_fields_in_df(csv_dict, snv_hgvs_headers, snv_hgvs_refs)
     snv_hgvs_df = import_data_to_new_df(new_csv_dict, snv_hgvs_headers)
     print (snv_hgvs_df.head())
     snv_hgvs_csv = output_csv(snv_hgvs_df, snv_hgvs_output_csv)
     
+    # create SNV Decipher upload csv
+
+     # parse template info into snv_refs
     snv_sn, snv_obj = convert_template_xls_to_df(bulk_snv_template)
     snv_refs = parse_ref_from_sheet_to_dict(snv_sn, snv_obj)
     snv_headers = snv_refs["headers"]
-    print (snv_headers)
-    new_csv_dict = check_required_fields_in_df(csv_dict, snv_headers)
+
+    #parse info from mgcm_csv into snv_df, then converting to csv
+    new_csv_dict = check_required_fields_in_df(csv_dict, snv_headers, snv_refs)
     snv_df = import_data_to_new_df(new_csv_dict, snv_headers)        
     print (snv_df.head())    
     snv_csv = output_csv(snv_df, snv_output_csv)
